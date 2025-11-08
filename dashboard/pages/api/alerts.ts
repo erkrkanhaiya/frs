@@ -7,7 +7,12 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    const response = await fetch(`${API_BASE}/alerts`)
+    const token = req.headers.authorization || ''
+    const response = await fetch(`${API_BASE}/alerts`, {
+      headers: {
+        'Authorization': token
+      }
+    })
     const data = await response.json()
     res.status(200).json(data)
   } catch (error) {

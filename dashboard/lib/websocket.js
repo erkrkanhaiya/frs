@@ -19,15 +19,17 @@ export function useWebSocket(path, onMessage) {
   }, [onMessage])
 
   useEffect(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsPath = path.startsWith('/') ? path.slice(1) : path
-    const ws = new WebSocket(`${wsProtocol}//${window.location.host}/${wsPath}`)
+    // Connect to backend WebSocket, not Next.js server
+    const wsProtocol = 'ws:'
+    const wsHost = '127.0.0.1:8000'
+    const wsPath = path.startsWith('/') ? path : `/${path}`
+    const ws = new WebSocket(`${wsProtocol}//${wsHost}${wsPath}`)
 
     ws.onmessage = handleMessage
     ws.onclose = () => {
       // Try to reconnect in 5 seconds
       setTimeout(() => {
-        const newWs = new WebSocket(`${wsProtocol}//${window.location.host}/${wsPath}`)
+        const newWs = new WebSocket(`${wsProtocol}//${wsHost}${wsPath}`)
         newWs.onmessage = handleMessage
       }, 5000)
     }

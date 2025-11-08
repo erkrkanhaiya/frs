@@ -16,6 +16,7 @@ export default function Navigation() {
   const menuItems = [
     { text: 'Dashboard', href: '/', icon: DashboardIcon },
     { text: 'Cameras', href: '/cameras', icon: CameraIcon },
+    { text: 'Persons', href: '/persons', icon: UserIcon },
     { text: 'Alert Rules', href: '/alert-rules', icon: AlertIcon },
     { text: 'Users', href: '/users', icon: UserIcon },
   ];

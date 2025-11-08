@@ -1,21 +1,15 @@
 import useSWR from 'swr'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import Analytics from '../components/Analytics'
 import Layout from '../components/Layout'
 import { withAuth } from '../lib/withAuth'
 import { useWebSocket } from '../lib/websocket'
+import { useAlertNotification } from '../lib/useAlertNotification'
+import { apiFetcher } from '../lib/apiFetcher'
 
 const fetcher = async (url) => {
-  const token = localStorage.getItem('authToken')
-  const res = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  })
-  if (!res.ok) throw new Error('Failed to fetch')
-  const data = await res.json()
-  // Ensure we always return an array
+  const data = await apiFetcher(url)
   return Array.isArray(data) ? data : []
 }
 
@@ -23,14 +17,14 @@ const AlertCard = ({ alert, isNew }) => {
   return (
     <div className={`bg-white rounded-lg shadow-sm border p-4 ${isNew ? 'ring-2 ring-red-500' : ''}`}>
       <a 
-        href={`/incidents/${encodeURIComponent(alert.filename)}`}
+        href={`/api/incidents/${encodeURIComponent(alert.filename)}`}
         target="_blank"
         rel="noreferrer"
         className="block hover:opacity-90 transition-opacity"
       >
         <div className="relative">
           <img
-            src={`/incidents/${encodeURIComponent(alert.filename)}`}
+            src={`/api/incidents/${encodeURIComponent(alert.filename)}`}
             alt={alert.name}
             className="w-full h-40 object-cover rounded-md"
           />
@@ -70,9 +64,18 @@ function Home() {
   const [page, setPage] = useState(1)
   const [view, setView] = useState('grid') // 'grid' or 'timeline'
   const perPage = 12
+  const previousAlertsRef = useRef([])
+  const { showNotification } = useAlertNotification()
 
-  // WebSocket setup for real-time alerts
+  // WebSocket setup for real-time alerts with notification
   useWebSocket('/ws/alerts', (data) => {
+    console.log('WebSocket alert received:', data)
+    
+    // Check if this is a new suspicious/unknown person alert
+    if (data.alert && (data.alert.name === 'Unknown' || data.alert.suspicious)) {
+      showNotification(data.alert)
+    }
+    
     mutate()
   })
 
@@ -208,7 +211,7 @@ function Home() {
                     className="block hover:opacity-90 transition-opacity"
                   >
                     <img
-                      src={`/incidents/${encodeURIComponent(alert.filename)}`}
+                      src={`/api/incidents/${encodeURIComponent(alert.filename)}`}
                       alt={alert.name}
                       className="w-full h-32 object-cover rounded-md"
                     />

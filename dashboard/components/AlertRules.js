@@ -19,6 +19,7 @@ export default function AlertRules() {
   });
 
   const fetchRules = async () => {
+    if (!token) return;
     try {
       const response = await fetch('http://localhost:8000/alert-rules/', {
         headers: {
@@ -26,9 +27,10 @@ export default function AlertRules() {
         }
       });
       const data = await response.json();
-      setRules(data);
+      setRules(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching alert rules:', error);
+      setRules([]);
     }
   };
 
@@ -122,7 +124,7 @@ export default function AlertRules() {
       </Box>
 
       <List>
-        {rules.map((rule) => (
+        {rules && Array.isArray(rules) && rules.map((rule) => (
           <ListItem key={rule.id} divider>
             <ListItemText
               primary={rule.name}

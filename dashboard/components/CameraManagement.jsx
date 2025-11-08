@@ -17,17 +17,9 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Videocam as CameraIcon } from '@mui/icons-material';
 import useSWR, { mutate } from 'swr';
+import { apiFetcher } from '../lib/apiFetcher';
 
-const fetcher = async (url) => {
-  const token = localStorage.getItem('authToken');
-  const res = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-  if (!res.ok) throw new Error('Failed to fetch');
-  return res.json();
-};
+const fetcher = (url) => apiFetcher(url);
 
 export default function CameraManagement() {
   const [open, setOpen] = useState(false);
@@ -42,8 +34,30 @@ export default function CameraManagement() {
     message: '',
     severity: 'success'
   });
+  const [watchStatus, setWatchStatus] = useState('stopped');
 
   const { data: cameras = [], error } = useSWR('/api/cameras', fetcher);
+  const { data: incidents = { incidents: [] } } = useSWR('/api/incidents', fetcher);
+
+  // Poll watch status every 5 seconds
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const token = localStorage.getItem('authToken');
+        const res = await fetch('/api/watch/status', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setWatchStatus(data.status || 'stopped');
+      } catch (err) {
+        console.error('Error checking watch status:', err);
+      }
+    };
+    
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleClickOpen = () => {
     setFormData({
@@ -132,28 +146,67 @@ export default function CameraManagement() {
     }
   };
 
-  if (error) {
-    return (
-      <Alert severity="error" sx={{ mt: 2 }}>
-        Error loading cameras: {error.message}
-      </Alert>
-    );
-  }
-
   return (
     <Box>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error.status === 401 ? 'Session expired. Please log in again.' : `Error loading cameras: ${error.message}`}
+          <Button size="small" variant="outlined" sx={{ ml: 2 }} onClick={() => mutate('/api/cameras')}>Retry</Button>
+        </Alert>
+      )}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">
           Camera Management
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<CameraIcon />}
-          onClick={handleClickOpen}
-        >
-          Add Camera
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant={watchStatus === 'running' ? 'contained' : 'outlined'}
+            color="success"
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('authToken');
+                const r = await fetch('/api/watch/start', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await r.json();
+                if (!r.ok) throw new Error('Failed to start watcher');
+                showSnackbar(`Realtime watcher started (${data.cameras?.length || 0} cameras)`);
+                setWatchStatus('running');
+              } catch (e) {
+                console.error(e);
+                showSnackbar('Failed to start watcher', 'error');
+              }
+            }}
+            disabled={watchStatus === 'running'}
+          >
+            {watchStatus === 'running' ? '✓ Watch Running' : 'Start Watch'}
+          </Button>
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem('authToken');
+                const r = await fetch('/api/watch/stop', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                if (!r.ok) throw new Error('Failed to stop watcher');
+                showSnackbar('Realtime watcher stopped');
+                setWatchStatus('stopped');
+              } catch (e) {
+                console.error(e);
+                showSnackbar('Failed to stop watcher', 'error');
+              }
+            }}
+            disabled={watchStatus !== 'running'}
+          >
+            Stop Watch
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<CameraIcon />}
+            onClick={handleClickOpen}
+          >
+            Add Camera
+          </Button>
+        </Box>
       </Box>
 
       <Grid container spacing={3}>
@@ -195,6 +248,47 @@ export default function CameraManagement() {
           </Grid>
         ))}
       </Grid>
+
+      {/* Captured Incident Images Section */}
+      <Box sx={{ mt: 6 }}>
+        <Typography variant="h5" component="h2" sx={{ mb: 3 }}>
+          Captured Incidents
+        </Typography>
+        {incidents.incidents && incidents.incidents.length > 0 ? (
+          <Grid container spacing={2}>
+            {incidents.incidents.slice(0, 12).map((incident) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={incident.filename}>
+                <Card>
+                  <Box
+                    component="img"
+                    src={`http://127.0.0.1:8000${incident.url}`}
+                    alt={incident.filename}
+                    sx={{
+                      width: '100%',
+                      height: 200,
+                      objectFit: 'cover',
+                      cursor: 'pointer'
+                    }}
+                    onClick={() => window.open(`http://127.0.0.1:8000${incident.url}`, '_blank')}
+                  />
+                  <CardContent>
+                    <Typography variant="caption" display="block" noWrap>
+                      {incident.filename}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      {new Date(incident.created).toLocaleString()}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        ) : (
+          <Typography color="textSecondary">
+            No incidents captured yet. Start the camera watch to detect faces.
+          </Typography>
+        )}
+      </Box>
 
       <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
         <DialogTitle>{editingCamera ? 'Edit Camera' : 'Add Camera'}</DialogTitle>

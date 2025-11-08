@@ -17,6 +17,7 @@ export default function UserManagement() {
   });
 
   const fetchUsers = async () => {
+    if (!token) return;
     try {
       const response = await fetch('http://localhost:8000/users/', {
         headers: {
@@ -24,9 +25,10 @@ export default function UserManagement() {
         }
       });
       const data = await response.json();
-      setUsers(data);
+      setUsers(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error fetching users:', error);
+      setUsers([]);
     }
   };
 
@@ -121,7 +123,7 @@ export default function UserManagement() {
       </Box>
 
       <List>
-        {users.map((user) => (
+        {users && Array.isArray(users) && users.map((user) => (
           <ListItem key={user.id} divider>
             <ListItemText
               primary={user.full_name}
