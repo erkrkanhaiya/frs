@@ -24,8 +24,10 @@ class User(UserBase):
 
 class CameraBase(BaseModel):
     name: str
-    source: str
-    type: str
+    url: Optional[str] = None  # Accept 'url' from frontend
+    location: Optional[str] = None  # Accept 'location' from frontend
+    source: Optional[str] = None  # Legacy field
+    type: Optional[str] = "local"  # Default type
     enabled: bool = True
     config: Optional[Dict[str, Any]] = None
 
@@ -35,8 +37,15 @@ class CameraCreate(CameraBase):
 class CameraUpdate(CameraBase):
     pass
 
-class Camera(CameraBase):
+class Camera(BaseModel):
     id: int
+    name: str
+    url: Optional[str] = None
+    location: Optional[str] = None
+    source: Optional[str] = None
+    type: Optional[str] = "local"
+    enabled: bool = True
+    config: Optional[Dict[str, Any]] = None
     created_at: datetime
     last_seen: Optional[datetime] = None
 

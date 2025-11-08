@@ -38,13 +38,26 @@ DEFAULT_CAMERAS = [0]  # Add more camera indices or RTSP URLs here
 
 def parse_camera_source(source):
     """Parse camera source into OpenCV-compatible format."""
-    if isinstance(source, (int, str)):
+    # If already an int, return it
+    if isinstance(source, int):
         return source
+    
+    # If it's a string, try to convert to int
+    if isinstance(source, str):
+        # Remove whitespace
+        source = source.strip()
+        
+        # Try to convert to int (for camera indices like "0", "1", etc.)
+        try:
+            return int(source)
+        except ValueError:
+            # Not a number, so it's probably an RTSP URL
+            return source
+    
+    # Fallback
     try:
-        # Try to convert string to int for number-like values
         return int(str(source))
     except ValueError:
-        # Return as-is for RTSP URLs
         return str(source)
 
 class FaceRecognitionSystem:
@@ -204,6 +217,7 @@ class FaceRecognitionSystem:
             "camera_id": camera_id,
             "timestamp": timestamp,
             "filename": filename,
+            "suspicious": (name == "Unknown")  # Flag unknown persons as suspicious
         }
         url = "http://127.0.0.1:8000/alerts"
         # Try requests if available, otherwise use urllib
@@ -360,5 +374,15 @@ class FaceRecognitionSystem:
         logger.info("Face recognition system stopped")
 
 if __name__ == "__main__":
-    system = FaceRecognitionSystem()
+    import sys
+    
+    # Get camera sources from command line arguments
+    camera_sources = sys.argv[1:] if len(sys.argv) > 1 else None
+    
+    if camera_sources:
+        logger.info(f"Starting with cameras: {camera_sources}")
+    else:
+        logger.info(f"Starting with default cameras: {DEFAULT_CAMERAS}")
+    
+    system = FaceRecognitionSystem(camera_sources=camera_sources)
     system.start()

@@ -39,10 +39,54 @@ def get_camera(db: Session, camera_id: int):
     return db.query(models.Camera).filter(models.Camera.id == camera_id).first()
 
 def get_cameras(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Camera).offset(skip).limit(limit).all()
+    cameras = db.query(models.Camera).offset(skip).limit(limit).all()
+    # Transform database fields back to frontend format
+    result = []
+    for cam in cameras:
+        camera_dict = {
+            'id': cam.id,
+            'name': cam.name,
+            'url': cam.source,  # Map source back to url
+            'location': cam.config.get('location', '') if cam.config else '',
+            'source': cam.source,
+            'type': cam.type,
+            'enabled': cam.enabled,
+            'config': cam.config,
+            'created_at': cam.created_at,
+            'last_seen': cam.last_seen
+        }
+        result.append(camera_dict)
+    return result
 
 def create_camera(db: Session, camera: schemas.CameraCreate):
-    db_camera = models.Camera(**camera.dict())
+    # Transform frontend fields (url/location) to database fields (source/type)
+    camera_data = camera.dict()
+    
+    # Map 'url' to 'source' if provided
+    if camera_data.get('url') is not None:
+        camera_data['source'] = camera_data['url']
+    
+    # Determine type based on source
+    source = camera_data.get('source', '')
+    if source.startswith('rtsp://') or source.startswith('http://'):
+        camera_data['type'] = 'rtsp'
+    else:
+        camera_data['type'] = 'local'
+    
+    # Store location in config if provided
+    if camera_data.get('location'):
+        if camera_data.get('config') is None:
+            camera_data['config'] = {}
+        camera_data['config']['location'] = camera_data['location']
+    
+    # Create database model
+    db_camera = models.Camera(
+        name=camera_data['name'],
+        source=camera_data.get('source', '0'),
+        type=camera_data.get('type', 'local'),
+        enabled=camera_data.get('enabled', True),
+        config=camera_data.get('config')
+    )
     db.add(db_camera)
     db.commit()
     db.refresh(db_camera)
@@ -51,8 +95,33 @@ def create_camera(db: Session, camera: schemas.CameraCreate):
 def update_camera(db: Session, camera_id: int, camera: schemas.CameraCreate):
     db_camera = get_camera(db, camera_id)
     if db_camera:
-        for key, value in camera.dict().items():
-            setattr(db_camera, key, value)
+        camera_data = camera.dict()
+        
+        # Map 'url' to 'source' if provided
+        if camera_data.get('url') is not None:
+            db_camera.source = camera_data['url']
+        
+        # Update type based on source
+        source = camera_data.get('url') or db_camera.source
+        if source.startswith('rtsp://') or source.startswith('http://'):
+            db_camera.type = 'rtsp'
+        else:
+            db_camera.type = 'local'
+        
+        # Update name
+        if camera_data.get('name'):
+            db_camera.name = camera_data['name']
+        
+        # Update enabled status
+        if 'enabled' in camera_data:
+            db_camera.enabled = camera_data['enabled']
+        
+        # Store location in config
+        if camera_data.get('location'):
+            if db_camera.config is None:
+                db_camera.config = {}
+            db_camera.config['location'] = camera_data['location']
+        
         db.commit()
         db.refresh(db_camera)
     return db_camera
