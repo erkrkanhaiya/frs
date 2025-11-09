@@ -2,6 +2,8 @@
 
 A real-time face recognition system that monitors webcam feeds for known faces and triggers alerts when matches are found.
 
+npm run dev:all
+
 ## Features
 
 - Real-time face detection and recognition
@@ -82,6 +84,7 @@ The server will expose:
 - POST /alerts  -> accept alerts from `realtime_face_watchlist.py`
 - GET /alerts   -> list recent alerts
 - GET /incidents/{filename} -> serve incident images
+ - GET /stats   -> aggregated analytics (requires auth)
 
 ## Running both server and watcher
 
@@ -97,6 +100,38 @@ python alerts_server.py
 # Terminal 2: start watchlist
 source venv/bin/activate
 python realtime_face_watchlist.py
+## Running the Dashboard (Next.js)
+
+1) Install dependencies (first time only):
+
+```bash
+cd dashboard
+npm install
+```
+
+2) Start the dev server:
+
+```bash
+npm run dev
+```
+
+3) Open http://localhost:3000 in your browser and log in:
+
+- Username: `admin`
+- Password: `changeme123`
+
+The dashboard will use the Next.js API routes to proxy requests to the FastAPI backend at `http://127.0.0.1:8000` (default). If your backend runs elsewhere, set `API_BASE` when starting Next:
+
+```bash
+API_BASE=http://192.168.1.50:8000 npm run dev
+```
+
+### Troubleshooting
+
+- Failed to load alerts: Ensure you are logged in so the Authorization header is present. The proxy at `/api/alerts` requires `Authorization: Bearer <token>`.
+- Stats 500 errors: Make sure the backend is restarted after code changes; analytics parsing supports both ISO and legacy timestamps.
+- Port busy (3000/8000): Stop existing processes (`lsof -nP -iTCP:3000|8000`) and kill them, then restart.
+
 ```
 
 ## Configuration

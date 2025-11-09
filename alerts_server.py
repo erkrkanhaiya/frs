@@ -100,11 +100,26 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Load persisted alerts if present
+def _sanitize_alert(a: dict) -> dict:
+    """Ensure minimum keys exist for an alert to prevent response_model validation errors."""
+    return {
+        "name": a.get("name", "Unknown"),
+        "camera_id": a.get("camera_id", 0),
+        "timestamp": a.get("timestamp", datetime.utcnow().isoformat()),
+        "filename": a.get("filename", "unknown.jpg"),
+        "suspicious": bool(a.get("suspicious", a.get("name", "Unknown") == "Unknown")),
+        "camera_name": a.get("camera_name")
+    }
+
+# Load persisted alerts if present with sanitation
 if os.path.exists(ALERTS_FILE):
     try:
         with open(ALERTS_FILE, "r", encoding="utf-8") as f:
-            alerts_store = json.load(f)
+            raw_alerts = json.load(f)
+            if isinstance(raw_alerts, list):
+                alerts_store = [_sanitize_alert(a) for a in raw_alerts]
+            else:
+                alerts_store = []
     except Exception:
         alerts_store = []
 else:
@@ -211,6 +226,73 @@ async def upload_person_image(name: str, file: UploadFile = File(...), current_u
         return {"saved": dest.name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/persons/{name}")
+def delete_person(
+    name: str,
+    purge_alerts: bool = False,
+    purge_incidents: bool = False,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete a person from the faces database.
+
+    Query Params:
+    - purge_alerts: also remove historical alerts referencing this person
+    - purge_incidents: also remove incident images whose filename ends with _{person}.jpg
+
+    Returns counts of removed items for transparency.
+    """
+    safe = name.strip().replace("..", "").replace("/", "_")
+    folder = pathlib.Path(FACES_DB) / safe
+    if not folder.exists() or not folder.is_dir():
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    # Remove face images folder
+    try:
+        shutil.rmtree(folder)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to remove person folder: {e}")
+
+    removed_alerts = 0
+    removed_incidents = 0
+
+    global alerts_store
+    if purge_alerts:
+        before = len(alerts_store)
+        alerts_store = [a for a in alerts_store if a.get("name") != safe]
+        removed_alerts = before - len(alerts_store)
+        # persist updated alerts_store
+        try:
+            with open(ALERTS_FILE, "w", encoding="utf-8") as f:
+                json.dump(alerts_store, f, indent=2)
+        except Exception as e:
+            # Not fatal; continue
+            pass
+
+    if purge_incidents:
+        try:
+            inc_path = pathlib.Path(INCIDENTS_FOLDER)
+            if inc_path.exists():
+                for file in inc_path.iterdir():
+                    if file.is_file() and file.suffix.lower() in [".jpg", ".jpeg", ".png"]:
+                        # Legacy filename pattern ends with _{name}.jpg
+                        if file.name.endswith(f"_{safe}.jpg") or file.name.endswith(f"_{safe}.jpeg") or file.name.endswith(f"_{safe}.png"):
+                            try:
+                                file.unlink()
+                                removed_incidents += 1
+                            except Exception:
+                                pass
+        except Exception:
+            # Ignore failures removing incidents
+            pass
+
+    return {
+        "deleted": safe,
+        "removed_alerts": removed_alerts,
+        "removed_incidents": removed_incidents,
+        "purge_alerts": purge_alerts,
+        "purge_incidents": purge_incidents
+    }
 
 @app.get("/alerts", response_model=List[Alert])
 async def list_alerts(

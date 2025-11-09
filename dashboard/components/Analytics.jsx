@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import useSWR from 'swr'
+import { apiFetcher } from '../lib/apiFetcher'
+import { useWebSocket } from '../lib/websocket'
+import { useAuth } from '../contexts/AuthContext'
 
-const fetcher = (url) => fetch(url).then((r) => r.json())
+const fetcher = (url) => apiFetcher(url)
 
 function StatCard({ title, value, subtext }) {
   return (
@@ -47,19 +50,28 @@ function Chart({ data, title }) {
 
 export default function Analytics() {
   const [timeRange, setTimeRange] = useState(7) // 7 days default
-  const { data: stats, error } = useSWR(
-    `/api/stats?days=${timeRange}`,
+  const { token } = useAuth()
+  const shouldFetch = Boolean(token)
+  const { data: stats, error, mutate } = useSWR(
+    shouldFetch ? `/api/stats?days=${timeRange}` : null,
     fetcher,
     { refreshInterval: 30000 }
   )
 
-  if (error) return (
+  // Revalidate stats on new alerts from WebSocket
+  useWebSocket('/ws/alerts', (msg) => {
+    if (msg && msg.type === 'new_alert') {
+      mutate()
+    }
+  })
+
+  if (shouldFetch && error) return (
     <div className="text-red-600">
       Failed to load statistics
     </div>
   )
 
-  if (!stats) return (
+  if (shouldFetch && !stats) return (
     <div className="animate-pulse">
       Loading statistics...
     </div>

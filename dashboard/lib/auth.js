@@ -25,7 +25,17 @@ export function useAuth() {
         body: formData,
       })
 
-      if (!res.ok) throw new Error('Login failed')
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        let data
+        try { data = JSON.parse(text) } catch { data = { raw: text } }
+        const reason = data?.error || 'Login failed'
+        const detail = data?.detail || data?.upstream?.detail || data?.raw || ''
+        const apiBase = data?.apiBase || ''
+        const message = [reason, apiBase ? `(API: ${apiBase})` : '', detail ? `- ${detail}` : '']
+          .filter(Boolean).join(' ')
+        throw new Error(message)
+      }
       
       const data = await res.json()
       localStorage.setItem('authToken', data.access_token)
@@ -33,6 +43,8 @@ export function useAuth() {
       return true
     } catch (error) {
       console.error('Login error:', error)
+      // Surface a user-friendly message; keep return boolean for caller
+      alert(`Login error: ${error?.message || error}`)
       return false
     }
   }

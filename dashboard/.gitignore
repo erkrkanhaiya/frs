@@ -1,0 +1,7 @@
+# Local env files
+.env*.local
+.env.local
+
+# Next.js
+.next/
+out/

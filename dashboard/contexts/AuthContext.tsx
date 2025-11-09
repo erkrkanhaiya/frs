@@ -48,6 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       localStorage.setItem('authToken', data.access_token);
       setToken(data.access_token);
+      // Dispatch a custom event so pages can revalidate immediately after login.
+      window.dispatchEvent(new Event('auth:token-set'));
       return true;
     } catch (error) {
       console.error('Login error:', error);

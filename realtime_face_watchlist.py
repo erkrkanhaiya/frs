@@ -196,17 +196,23 @@ class FaceRecognitionSystem:
         return frame, detected_names
 
     def _log_incident(self, frame: np.ndarray, name: str, camera_id: int) -> None:
-        """Log a detection incident with snapshot."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_cam{camera_id}_{name}.jpg"
+        """Log a detection incident with snapshot.
+
+        We generate two timestamp formats:
+        - filename_timestamp: legacy compact format for filenames
+        - iso_timestamp: full ISO8601 for API / analytics consumption
+        """
+        filename_timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        iso_timestamp = datetime.utcnow().isoformat()
+        filename = f"{filename_timestamp}_cam{camera_id}_{name}.jpg"
         filepath = os.path.join(INCIDENTS_PATH, filename)
-        
+
         cv2.imwrite(filepath, frame)
         logger.warning(f"⚠️ Alert! {name} detected on camera {camera_id}")
         logger.info(f"Incident logged: {filename}")
         # Try to POST alert to local FastAPI server (non-blocking, best-effort)
         try:
-            self._post_alert(name, camera_id, timestamp, filename)
+            self._post_alert(name, camera_id, iso_timestamp, filename)
         except Exception as e:
             logger.debug(f"Failed to send alert to local server: {e}")
 

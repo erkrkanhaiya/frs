@@ -75,6 +75,11 @@ On the **Cameras** page, scroll down to the **"Captured Incidents"** section to 
 - **POST** `/api/persons` - Add new person
 - **GET** `/api/persons/{name}/images` - List images for a person
 - **POST** `/api/persons/{name}/images` - Upload image for a person
+- **DELETE** `/api/persons/{name}` - Delete a person from watchlist
+   - Query params:
+      - `purge_alerts=true|false` (optional) also remove alert history for this person
+      - `purge_incidents=true|false` (optional) also remove incident images for this person
+   - Example: `/api/persons/demo_person?purge_alerts=true&purge_incidents=true`
 
 ## Technical Details
 

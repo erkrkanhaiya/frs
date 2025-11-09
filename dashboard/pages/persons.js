@@ -14,6 +14,29 @@ function PersonsPage() {
   const [file, setFile] = useState(null)
 
   const persons = data?.persons || []
+  const [deleting, setDeleting] = useState({}) // name->bool
+
+  const deletePerson = async (name, opts = { purgeAlerts: false, purgeIncidents: false }) => {
+    if (!name) return
+    const confirmMsg = `Delete '${name}'?\n` +
+      (opts.purgeAlerts ? '- Also purge alerts for this person\n' : '') +
+      (opts.purgeIncidents ? '- Also purge incident images for this person\n' : '') +
+      'This action cannot be undone.'
+    if (!window.confirm(confirmMsg)) return
+    setDeleting(d => ({ ...d, [name]: true }))
+    try {
+      const token = localStorage.getItem('authToken')
+      const url = `/api/persons/${encodeURIComponent(name)}?purge_alerts=${opts.purgeAlerts}&purge_incidents=${opts.purgeIncidents}`
+      const res = await fetch(url, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
+      if (res.ok) {
+        // Ensure selected cleared if deleting current
+        if (selected?.name === name) setSelected(null)
+        await mutate()
+      }
+    } finally {
+      setDeleting(d => ({ ...d, [name]: false }))
+    }
+  }
 
   const createPerson = async () => {
     if (!newName.trim()) return
@@ -95,14 +118,34 @@ function PersonsPage() {
         {persons.length === 0 && <div className="text-gray-500 text-center py-8">No persons added yet. Add a person above to start building your watchlist.</div>}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
           {persons.map(p => (
-            <button
+            <div
               key={p}
-              onClick={() => loadImages(p)}
-              className={`border rounded-lg p-4 text-left hover:border-blue-500 hover:shadow-md transition ${selected?.name === p ? 'border-blue-600 bg-blue-50 shadow-md' : 'bg-white'}`}
+              className={`border rounded-lg p-4 hover:border-blue-500 hover:shadow-md transition relative ${selected?.name === p ? 'border-blue-600 bg-blue-50 shadow-md' : 'bg-white'}`}
             >
-              <div className="font-semibold text-lg mb-1">{p}</div>
-              <div className="text-xs text-gray-500">Click to manage images</div>
-            </button>
+              <button onClick={() => loadImages(p)} className="text-left w-full">
+                <div className="font-semibold text-lg mb-1 flex items-center justify-between">
+                  <span>{p}</span>
+                </div>
+                <div className="text-xs text-gray-500">Click to manage images</div>
+              </button>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                <button
+                  disabled={deleting[p]}
+                  onClick={() => deletePerson(p, { purgeAlerts: false, purgeIncidents: false })}
+                  className="px-3 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                >{deleting[p] ? 'Deleting...' : 'Delete'}</button>
+                <button
+                  disabled={deleting[p]}
+                  onClick={() => deletePerson(p, { purgeAlerts: true, purgeIncidents: false })}
+                  className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+                >{deleting[p] ? 'Deleting...' : 'Delete+Alerts'}</button>
+                <button
+                  disabled={deleting[p]}
+                  onClick={() => deletePerson(p, { purgeAlerts: true, purgeIncidents: true })}
+                  className="px-3 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50"
+                >{deleting[p] ? 'Deleting...' : 'Full Purge'}</button>
+              </div>
+            </div>
           ))}
         </div>
 

@@ -7,6 +7,8 @@ import { withAuth } from '../lib/withAuth'
 import { useWebSocket } from '../lib/websocket'
 import { useAlertNotification } from '../lib/useAlertNotification'
 import { apiFetcher } from '../lib/apiFetcher'
+// Added apiFetcher import for sending synthetic demo alerts.
+// (apiFetcher original import moved above for clarity)
 
 const fetcher = async (url) => {
   const data = await apiFetcher(url)
@@ -56,26 +58,43 @@ const AlertCard = ({ alert, isNew }) => {
 }
 
 function Home() {
-  const { data: alerts, error, isLoading, mutate } = useSWR('/api/alerts', fetcher, { 
-    refreshInterval: 2000,
-    revalidateOnFocus: true
-  })
+  const { token } = useAuth()
+  // Only start SWR when token exists to avoid initial 401 spam.
+  const shouldFetch = Boolean(token)
+  const { data: alerts, error, isLoading, mutate } = useSWR(
+    shouldFetch ? '/api/alerts' : null,
+    fetcher,
+    {
+      refreshInterval: 2000,
+      revalidateOnFocus: true
+    }
+  )
   const [filter, setFilter] = useState('')
   const [page, setPage] = useState(1)
   const [view, setView] = useState('grid') // 'grid' or 'timeline'
   const perPage = 12
   const previousAlertsRef = useRef([])
   const { showNotification } = useAlertNotification()
+  // Revalidate alerts when token becomes available right after login
+  // by listening to the custom event from AuthContext.
+  // This avoids waiting for the next polling tick.
+  if (typeof window !== 'undefined') {
+    window.removeEventListener?.('auth:token-set', () => {})
+    window.addEventListener('auth:token-set', () => {
+      if (shouldFetch) {
+        try { mutate() } catch {}
+      }
+    }, { once: true })
+  }
 
   // WebSocket setup for real-time alerts with notification
+  // Now notify for ANY alert (including demo_person). If you want only demo_person, add condition.
   useWebSocket('/ws/alerts', (data) => {
+    if (!shouldFetch) return // Skip notifications until authenticated
     console.log('WebSocket alert received:', data)
-    
-    // Check if this is a new suspicious/unknown person alert
-    if (data.alert && (data.alert.name === 'Unknown' || data.alert.suspicious)) {
-      showNotification(data.alert)
+    if (data.alert) {
+      try { showNotification(data.alert) } catch (e) { console.warn('Notification failed', e) }
     }
-    
     mutate()
   })
 
@@ -106,7 +125,7 @@ function Home() {
     return now - new Date(timestamp).getTime() < 30000
   }
 
-  if (error) return (
+  if (shouldFetch && error) return (
     <div className="p-8">
       <div className="bg-red-50 text-red-600 p-4 rounded-lg">
         Failed to load alerts: {String(error)}
@@ -155,7 +174,7 @@ function Home() {
           </div>
         </div>
 
-        <div className="mb-6 flex gap-4 items-center">
+        <div className="mb-6 flex gap-4 items-center flex-wrap">
           <div className="flex-1 max-w-md">
             <input
               type="text"
@@ -168,6 +187,35 @@ function Home() {
           <div className="text-sm text-gray-500">
             {filteredAlerts.length} alerts
           </div>
+          <button
+            onClick={async () => {
+              const payload = {
+                name: 'demo_person',
+                camera_id: 0,
+                timestamp: new Date().toISOString(),
+                filename: `demo_person_${Date.now()}.jpg`,
+                suspicious: false,
+                camera_name: 'Demo Button'
+              }
+              try {
+                await apiFetcher('/api/alerts', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(payload)
+                })
+                // Optimistically show notification
+                try { showNotification(payload) } catch {}
+                mutate()
+              } catch (e) {
+                console.error('Failed to send test alert', e)
+                alert('Failed to send test alert. Check console for details.')
+              }
+            }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+            title="Send a synthetic alert for demo_person to test notifications"
+          >
+            Send Test Alert (demo_person)
+          </button>
         </div>
 
         {isLoading ? (
@@ -267,8 +315,9 @@ function Home() {
           </div>
         )}
 
-        <div className="mt-8 text-center text-sm text-gray-500">
-          Polling for new alerts every 2s
+        <div className="mt-8 text-center text-sm text-gray-500 space-y-1">
+          <div>Polling for new alerts every 2s</div>
+          <div className="text-xs text-gray-400">Use the green button above to simulate a demo_person detection instantly.</div>
         </div>
       </div>
     </Layout>

@@ -1,6 +1,6 @@
 Face Watchlist Dashboard
 
-This is a minimal Next.js dashboard that polls the FastAPI alerts server at http://127.0.0.1:8000/alerts and displays recent alerts with thumbnail images.
+This is a Next.js dashboard for the FastAPI face watchlist backend. It fetches alerts/stats through Next.js API routes and connects to the backend WebSocket for real-time notifications.
 
 Quick start
 
@@ -18,15 +18,30 @@ npm install
 # yarn
 ```
 
-3. Run the dev server:
+3. Configure backend URLs using an env file (recommended):
+
+```bash
+cp .env.local.example .env.local
+# then edit .env.local to match your backend
+# API_BASE is used by Next.js API routes (server-side)
+# NEXT_PUBLIC_WS_BASE/NEXT_PUBLIC_API_BASE are used in the browser for WebSockets and derived URLs
+```
+
+Default values in the example point to a local backend:
+
+- API_BASE=http://127.0.0.1:8000
+- NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000
+- NEXT_PUBLIC_WS_BASE=ws://127.0.0.1:8000
+
+4. Run the dev server:
 
 ```bash
 npm run dev
 ```
 
-4. Open http://localhost:3000 in your browser. The dashboard will poll the FastAPI server and show recent alerts.
+5. Open http://localhost:3000 in your browser. Log in via the login page, then navigate to Alerts.
 
 Notes
 
-- The dashboard expects the FastAPI server to run at http://127.0.0.1:8000 and to expose `/alerts` (JSON) and `/incidents/<filename>` for images.
-- If your FastAPI server runs on a different host/port, edit `pages/index.jsx` and update the API base URL.
+- If your FastAPI server runs on a different host/port, set API_BASE in `.env.local` rather than editing source files.
+- The dashboard’s WebSocket connects to `NEXT_PUBLIC_WS_BASE` or derives from `NEXT_PUBLIC_API_BASE` by replacing http -> ws.

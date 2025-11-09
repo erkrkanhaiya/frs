@@ -4,6 +4,17 @@ from collections import Counter
 from dateutil.parser import parse as parse_date
 from dateutil.tz import tzlocal
 
+# Robust timestamp parsing: handle ISO strings and our fallback "%Y%m%d_%H%M%S" format
+def _parse_ts(ts: str) -> datetime:
+    try:
+        return parse_date(ts)
+    except Exception:
+        try:
+            return datetime.strptime(ts, "%Y%m%d_%H%M%S")
+        except Exception:
+            # As a last resort, return a very old date so it drops out of recent windows
+            return datetime(1970, 1, 1)
+
 def get_alert_stats(alerts: List[dict], days: Optional[int] = None) -> dict:
     """Generate statistics from alerts."""
     now = datetime.now(tzlocal())
@@ -11,7 +22,7 @@ def get_alert_stats(alerts: List[dict], days: Optional[int] = None) -> dict:
         cutoff = now - timedelta(days=days)
         alerts = [
             a for a in alerts 
-            if parse_date(a['timestamp']).replace(tzinfo=tzlocal()) > cutoff
+            if _parse_ts(a['timestamp']).replace(tzinfo=tzlocal()) > cutoff
         ]
     
     if not alerts:
@@ -37,7 +48,7 @@ def get_alert_stats(alerts: List[dict], days: Optional[int] = None) -> dict:
     # Alerts by hour (last 24h by default)
     hour_counts = Counter()
     for alert in alerts:
-        dt = parse_date(alert['timestamp']).replace(tzinfo=tzlocal())
+        dt = _parse_ts(alert['timestamp']).replace(tzinfo=tzlocal())
         hour = dt.strftime('%H:00')
         hour_counts[hour] += 1
     
@@ -49,7 +60,7 @@ def get_alert_stats(alerts: List[dict], days: Optional[int] = None) -> dict:
     
     midpoint = now - period
     recent = sum(1 for a in alerts 
-                if parse_date(a['timestamp']).replace(tzinfo=tzlocal()) > midpoint)
+                if _parse_ts(a['timestamp']).replace(tzinfo=tzlocal()) > midpoint)
     previous = total_alerts - recent
     trend = (
         ((recent - previous) / previous * 100)
@@ -80,7 +91,7 @@ def get_person_history(
         cutoff = datetime.now(tzlocal()) - timedelta(days=days)
         person_alerts = [
             a for a in person_alerts 
-            if parse_date(a['timestamp']).replace(tzinfo=tzlocal()) > cutoff
+            if _parse_ts(a['timestamp']).replace(tzinfo=tzlocal()) > cutoff
         ]
     
     if not person_alerts:
@@ -94,7 +105,7 @@ def get_person_history(
         }
     
     # Sort by timestamp
-    person_alerts.sort(key=lambda x: parse_date(x['timestamp']))
+    person_alerts.sort(key=lambda x: _parse_ts(x['timestamp']))
     
     return {
         "name": name,

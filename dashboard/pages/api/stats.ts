@@ -6,16 +6,17 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Get auth token from request
-  const token = req.headers.authorization?.split(' ')[1]
-  if (!token) {
+  // Robustly read and forward the Authorization header as-is
+  const authHeaderRaw = req.headers.authorization
+  const authHeader = Array.isArray(authHeaderRaw) ? authHeaderRaw[0] : (authHeaderRaw || '')
+  if (!authHeader) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
   try {
     const response = await fetch(`${API_BASE}/stats${req.url?.split('/stats')[1] || ''}`, {
       headers: {
-        'Authorization': `Bearer ${token}`
+        'Authorization': authHeader
       }
     })
 
